@@ -27,19 +27,21 @@ import numpy as np
 from common.utils import save_results, make_dir
 from common.plot import plot_rewards
 from agent import DQN
+from agent import DDQN
 
 curr_time = datetime.datetime.now().strftime(
     "%Y%m%d-%H%M%S")  # obtain current time
 
 class DQNConfig:
     def __init__(self):
-        self.algo = "DQN"  # name of algo
+        self.algo = "DDQN"  # name of algo
         self.env = 'CartPole-v1'
         self.result_path = curr_path+"\\outputs\\" + self.env + \
             '\\'+curr_time+'\\results\\'  # path to save results
         self.model_path = curr_path+"\\outputs\\" + self.env + \
             '\\'+curr_time+'\\models\\'  # path to save models
-        self.train_eps = 1000  # max trainng episodes
+        self.train_eps = 300  # max trainng episodes
+        self.end_reward = 450 #当十步平均reward大于这个值时结束训练避免后期奖励下降
         self.eval_eps = 50 # number of episodes for evaluating
         self.gamma = 0.95
         self.epsilon_start = 0.90  # start epsilon of e-greedy policy
@@ -48,14 +50,15 @@ class DQNConfig:
         self.lr = 0.0001  # learning rate
         self.memory_capacity = 100000  # capacity of Replay Memory
         self.batch_size = 64
-        self.target_update = 4 # update frequency of target net，目标网络更新频率
+        self.target_update = 5 # update frequency of target net，目标网络更新间隔
+        self.DDQN_turn_target_and_policy = 100 #DDQN算法下适用，切换训练网络的间隔
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu")  # check gpu
             #"cuda"
         self.hidden_dim = 256  # hidden size of net
-        self.isdemo = True
+        self.isdemo = False
         self.demo_path = curr_path+"\\outputs\\" + self.env + \
-            '\\'+"20250609-121301"+'\\models\\'
+            '\\'+"20250609-152653"+'\\models\\'
         #''
         
 def env_agent_config(cfg,seed=1):
@@ -64,7 +67,10 @@ def env_agent_config(cfg,seed=1):
     #env.reset(seed=seed)
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.n
-    agent = DQN(state_dim,action_dim,cfg)
+    if cfg.algo == "DQN":
+        agent = DQN(state_dim,action_dim,cfg)
+    elif cfg.algo == "DDQN":
+        agent = DDQN(state_dim,action_dim,cfg)
     return env,agent
     
 def train(cfg, env, agent):
@@ -90,6 +96,8 @@ def train(cfg, env, agent):
             agent.target_net.load_state_dict(agent.policy_net.state_dict())
         if (i_ep+1)%10 == 0:
             print('Episode:{}/{}, Reward:{}'.format(i_ep+1, cfg.train_eps, ep_reward))
+            if ep_reward > 400:
+                break
         rewards.append(ep_reward)
         # save ma rewards
         if ma_rewards:
