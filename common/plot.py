@@ -40,4 +40,15 @@ def plot_losses(losses,algo = "DQN",save=True,path='./'):
     if save:
         plt.savefig(path+"losses_curve")
     plt.show()
+
+def plot_q_values(q_values,pre_q_values,env='CartPole-v0',algo = "DQN",save=True,path='./'):
+    sns.set()
+    plt.title("average q values of {} for {}".format(algo,env))
+    plt.xlabel('epsiodes')
+    plt.plot(q_values,label='q_values')
+    plt.plot(pre_q_values,label='pre_q_values')
+    plt.legend()
+    if save:
+        plt.savefig(path+"average_q_values_curve")
+    plt.show()
    

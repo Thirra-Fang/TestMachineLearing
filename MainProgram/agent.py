@@ -62,7 +62,7 @@ class DQN:
 
         #如果记忆不足batch_size，退出
         if len(self.memory) < self.batch_size:
-            return
+            return 0,0
         # 从memory中随机采样transition
         state_batch, action_batch, reward_batch, next_state_batch, done_batch = self.memory.sample(
             self.batch_size)
@@ -101,6 +101,13 @@ class DQN:
         #     param.grad.data.clamp_(-1, 1)
         self.optimizer.step()  # 更新模型
 
+
+        average_q_values = q_values.mean().item()
+        average_predict_q_values = next_q_values.mean().item()
+        #返回预测的q值和决策网络计算的q值，实验用
+        return average_q_values, average_predict_q_values
+
+
     def save(self, path):
         torch.save(self.target_net.state_dict(), path+'dqn_checkpoint.pth')
 
@@ -108,6 +115,7 @@ class DQN:
         self.target_net.load_state_dict(torch.load(path+'dqn_checkpoint.pth'))
         for target_param, param in zip(self.target_net.parameters(), self.policy_net.parameters()):
             param.data.copy_(target_param.data)
+
 
 class DDQN:
     def __init__(self, state_dim, action_dim, cfg):
@@ -123,6 +131,7 @@ class DDQN:
         self.batch_size = cfg.batch_size
         self.policy_net = MLP(state_dim, action_dim, hidden_dim=cfg.hidden_dim).to(self.device)
         self.target_net = MLP(state_dim, action_dim, hidden_dim=cfg.hidden_dim).to(self.device)
+        self.temp_net = MLP(state_dim, action_dim,hidden_dim=cfg.hidden_dim).to(self.device)
         for target_param, param in zip(self.target_net.parameters(),
                                        self.policy_net.parameters()):  # copy params from policy net
             target_param.data.copy_(param.data)
@@ -151,7 +160,7 @@ class DDQN:
 
         # 如果记忆不足batch_size，退出
         if len(self.memory) < self.batch_size:
-            return
+            return 0,0
         # 从memory中随机采样transition
         state_batch, action_batch, reward_batch, next_state_batch, done_batch = self.memory.sample(
             self.batch_size)
@@ -172,7 +181,7 @@ class DDQN:
         '''torch.gather:对于a=torch.Tensor([[1,2],[3,4]]),那么a.gather(1,torch.Tensor([[0],[1]]))=torch.Tensor([[1],[3]])'''
         q_values = self.policy_net(state_batch).gather(
             dim=1, index=action_batch)  # 等价于self.forward
-        # 计算所有next states的V(s_{t+1})，即通过target_net中选取reward最大的对应states
+        # 计算所有next states的V(s_{t+1})，即通过target_net中选取reward最大的对应states，列
         #DQN中：
         #next_q_values = self.target_net(next_state_batch).max(
         #    1)[0].detach()  # 比如tensor([ 0.0060, -0.0171,...,])
@@ -180,9 +189,9 @@ class DDQN:
         #返回最大值列表
         #DDQN中：
         action_values = self.policy_net(next_state_batch).max(1)[1].unsqueeze(1)
-            #返回最大值index
+            #返回最大值index,列
         next_q_values = self.target_net(next_state_batch).gather(dim=1, index=action_values).squeeze(1)
-            #选取使policy_net(next_state_batch)的reward最大的action，并带入target_net
+            #选取使policy_net(next_state_batch)的reward最大的action，并带入target_net，行
 
         # 计算 expected_q_value
         # 对于终止状态，此时done_batch[0]=1, 对应的expected_q_value等于reward
@@ -199,6 +208,11 @@ class DDQN:
         #     param.grad.data.clamp_(-1, 1)
         self.optimizer.step()  # 更新模型
 
+        average_q_values = q_values.mean().item()
+        average_predict_q_values = next_q_values.mean().item()
+        #返回预测的q值和决策网络计算的q值，实验用
+        return average_q_values, average_predict_q_values
+
     def save(self, path):
         torch.save(self.target_net.state_dict(), path + 'dqn_checkpoint.pth')
 
@@ -206,3 +220,8 @@ class DDQN:
         self.target_net.load_state_dict(torch.load(path + 'dqn_checkpoint.pth'))
         for target_param, param in zip(self.target_net.parameters(), self.policy_net.parameters()):
             param.data.copy_(target_param.data)
+    #交换目标网络和策略王略
+    def inverse_policy_target(self):
+        self.temp_net.load_state_dict(self.policy_net.state_dict())
+        self.policy_net.load_state_dict(self.target_net.state_dict())
+        self.target_net.load_state_dict(self.temp_net.state_dict())

@@ -26,6 +26,7 @@ import numpy as np
 
 from common.utils import save_results, make_dir
 from common.plot import plot_rewards
+from common.plot import plot_q_values
 from agent import DQN
 from agent import DDQN
 
@@ -34,14 +35,14 @@ curr_time = datetime.datetime.now().strftime(
 
 class DQNConfig:
     def __init__(self):
-        self.algo = "DDQN"  # name of algo
+        self.algo = "DQN"  # name of algo
         self.env = 'CartPole-v1'
         self.result_path = curr_path+"\\outputs\\" + self.env + \
-            '\\'+curr_time+'\\results\\'  # path to save results
+            '\\'+self.algo+'_'+curr_time+'\\results\\'  # path to save results
         self.model_path = curr_path+"\\outputs\\" + self.env + \
-            '\\'+curr_time+'\\models\\'  # path to save models
+            '\\'+self.algo+'_'+curr_time+'\\models\\'  # path to save models
         self.train_eps = 300  # max trainng episodes
-        self.end_reward = 450 #当十步平均reward大于这个值时结束训练避免后期奖励下降
+        self.end_reward = 500 #当ma_reward大于这个值时结束训练
         self.eval_eps = 50 # number of episodes for evaluating
         self.gamma = 0.95
         self.epsilon_start = 0.90  # start epsilon of e-greedy policy
@@ -50,15 +51,15 @@ class DQNConfig:
         self.lr = 0.0001  # learning rate
         self.memory_capacity = 100000  # capacity of Replay Memory
         self.batch_size = 64
-        self.target_update = 5 # update frequency of target net，目标网络更新间隔
-        self.DDQN_turn_target_and_policy = 100 #DDQN算法下适用，切换训练网络的间隔
+        self.target_update = 5 # update frequency of target net，DQN算法下适用，目标网络更新间隔
+        self.DDQN_turn_target_and_policy = 5 #DDQN算法下适用，切换训练网络的间隔
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu")  # check gpu
             #"cuda"
         self.hidden_dim = 256  # hidden size of net
-        self.isdemo = False
+        self.isdemo = True
         self.demo_path = curr_path+"\\outputs\\" + self.env + \
-            '\\'+"20250609-152653"+'\\models\\'
+            '\\'+"DDQN_20250609-213911"+'\\models\\'
         #''
         
 def env_agent_config(cfg,seed=1):
@@ -78,10 +79,15 @@ def train(cfg, env, agent):
     print(f'Env:{cfg.env}, Algorithm:{cfg.algo}, Device:{cfg.device}')
     rewards = []
     ma_rewards = []  # moveing average reward
+    aver_q_values = []
+    aver_pre_q_values = []
     for i_ep in range(cfg.train_eps):
         state = env.reset()
         done = False
         ep_reward = 0
+        ep_aver_q = 0
+        ep_aver_pre_q = 0
+        times = 0
         while True:
             #env.render()
             action = agent.choose_action(state)
@@ -89,23 +95,41 @@ def train(cfg, env, agent):
             ep_reward += reward
             agent.memory.push(state, action, reward, next_state, done)
             state = next_state
-            agent.update()
+
+            #获取每次迭代q平均输出值和预测值
+            average_q_values, average_predict_q_values = agent.update()
+            ep_aver_q += average_q_values
+            ep_aver_pre_q += average_predict_q_values
+            times += 1
+
             if done:
                 break
-        if (i_ep+1) % cfg.target_update == 0:
+        #保存并输出q输出值和预测值
+        ep_aver_q /= times
+        ep_aver_pre_q /= times
+        aver_q_values.append(ep_aver_q)
+        aver_pre_q_values.append(ep_aver_pre_q)
+
+        #拷贝参数至目标值网络
+        if cfg.algo == "DQN" and (i_ep+1) % cfg.target_update == 0:
             agent.target_net.load_state_dict(agent.policy_net.state_dict())
+
+        #交换当前值网络与目标值网络的参数
+        if cfg.algo == "DDQN" and (i_ep+1) % cfg.DDQN_turn_target_and_policy == 0:
+            agent.inverse_policy_target()
+
         if (i_ep+1)%10 == 0:
             print('Episode:{}/{}, Reward:{}'.format(i_ep+1, cfg.train_eps, ep_reward))
-            if ep_reward > 400:
-                break
         rewards.append(ep_reward)
         # save ma rewards
         if ma_rewards:
             ma_rewards.append(0.9*ma_rewards[-1]+0.1*ep_reward)
         else:
             ma_rewards.append(ep_reward)
+        if ma_rewards[-1] > cfg.end_reward:
+            break
     print('Complete training！')
-    return rewards, ma_rewards
+    return rewards, ma_rewards,aver_q_values, aver_pre_q_values
 
 def eval(cfg,env,agent):
     print('Start to eval !')
@@ -146,12 +170,16 @@ if __name__ == "__main__":
     if cfg.isdemo == False:
         # train
         env,agent = env_agent_config(cfg,seed=1)
-        rewards, ma_rewards = train(cfg, env, agent)
+        rewards, ma_rewards,aver_q_values, aver_pre_q_values = train(cfg, env, agent)
         make_dir(cfg.result_path, cfg.model_path)
         agent.save(path=cfg.model_path)
         save_results(rewards, ma_rewards, tag='train', path=cfg.result_path)
         plot_rewards(rewards, ma_rewards, tag="train",env=cfg.env,
                      algo=cfg.algo, path=cfg.result_path)
+        plot_q_values(aver_q_values,aver_pre_q_values,env=cfg.env,algo=cfg.algo,
+                      path=cfg.result_path)
+
+
     
     
         # eval
