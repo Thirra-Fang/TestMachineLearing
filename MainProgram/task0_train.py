@@ -27,21 +27,20 @@ import numpy as np
 from common.utils import save_results, make_dir
 from common.plot import plot_rewards
 from common.plot import plot_q_values
-from agent import DQN
-from agent import DDQN
+from agent import DQN, DDQN,REINFORCE
 
 curr_time = datetime.datetime.now().strftime(
     "%Y%m%d-%H%M%S")  # obtain current time
 
-class DQNConfig:
+class TestConfig:
     def __init__(self):
-        self.algo = "DQN"  # name of algo
+        self.algo = "REINFORCE"  # name of algo
         self.env = 'CartPole-v1'
         self.result_path = curr_path+"\\outputs\\" + self.env + \
             '\\'+self.algo+'_'+curr_time+'\\results\\'  # path to save results
         self.model_path = curr_path+"\\outputs\\" + self.env + \
             '\\'+self.algo+'_'+curr_time+'\\models\\'  # path to save models
-        self.train_eps = 300  # max trainng episodes
+        self.train_eps = 5000  # max trainng episodes
         self.end_reward = 500 #当ma_reward大于这个值时结束训练
         self.eval_eps = 50 # number of episodes for evaluating
         self.gamma = 0.95
@@ -57,10 +56,11 @@ class DQNConfig:
             "cuda" if torch.cuda.is_available() else "cpu")  # check gpu
             #"cuda"
         self.hidden_dim = 256  # hidden size of net
-        self.isdemo = True
+        self.isdemo = False
         self.demo_path = curr_path+"\\outputs\\" + self.env + \
-            '\\'+"DDQN_20250609-213911"+'\\models\\'
+            '\\'+"DDQN_20250610-003217"+'\\models\\'
         #''
+
         
 def env_agent_config(cfg,seed=1):
     env = gym.make(cfg.env)
@@ -72,6 +72,10 @@ def env_agent_config(cfg,seed=1):
         agent = DQN(state_dim,action_dim,cfg)
     elif cfg.algo == "DDQN":
         agent = DDQN(state_dim,action_dim,cfg)
+    elif cfg.algo == "REINFORCE":
+        agent = REINFORCE(state_dim, action_dim, cfg)
+    else:
+        agent = DQN(state_dim, action_dim, cfg)
     return env,agent
     
 def train(cfg, env, agent):
@@ -87,26 +91,41 @@ def train(cfg, env, agent):
         ep_reward = 0
         ep_aver_q = 0
         ep_aver_pre_q = 0
-        times = 0
+        i_step = 0
+        transition_dict = {
+            'states': [],
+            'actions': [],
+            'rewards': [],
+        }
         while True:
+            i_step+=1
             #env.render()
             action = agent.choose_action(state)
             next_state, reward, done, _ = env.step(action)
             ep_reward += reward
-            agent.memory.push(state, action, reward, next_state, done)
+            if cfg.algo == "DQN" or cfg.algo == "DDQN":
+                agent.memory.push(state, action, reward, next_state, done)
+            elif cfg.algo == "REINFORCE":
+                transition_dict['states'].append(state)
+                transition_dict['actions'].append(action)
+                transition_dict['rewards'].append(reward)
             state = next_state
 
-            #获取每次迭代q平均输出值和预测值
-            average_q_values, average_predict_q_values = agent.update()
-            ep_aver_q += average_q_values
-            ep_aver_pre_q += average_predict_q_values
-            times += 1
-
+            if cfg.algo == "DQN" or cfg.algo == "DDQN":
+                #获取每次迭代q平均输出值和预测值
+                average_q_values, average_predict_q_values = agent.update()
+                ep_aver_q += average_q_values
+                ep_aver_pre_q += average_predict_q_values
             if done:
                 break
+
+        if cfg.algo == "REINFORCE":
+            #REINFORCE每轮迭代一次
+            agent.update(transition_dict)
+
         #保存并输出q输出值和预测值
-        ep_aver_q /= times
-        ep_aver_pre_q /= times
+        ep_aver_q /= i_step
+        ep_aver_pre_q /= i_step
         aver_q_values.append(ep_aver_q)
         aver_pre_q_values.append(ep_aver_pre_q)
 
@@ -166,7 +185,7 @@ def eval(cfg,env,agent):
     return rewards,ma_rewards
 
 if __name__ == "__main__":
-    cfg = DQNConfig()
+    cfg = TestConfig()
     if cfg.isdemo == False:
         # train
         env,agent = env_agent_config(cfg,seed=1)
