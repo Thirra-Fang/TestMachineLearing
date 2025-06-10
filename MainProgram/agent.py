@@ -281,6 +281,7 @@ class REINFORCE:
         with torch.no_grad():
             state = torch.tensor([state], device=self.device, dtype=torch.float32)
             act_prob = self.policy_net(state)
+            print(act_prob)
             action = safe_multinomial(act_prob,num_samples=1)[0].item()#根据动作概率选取动作
 
         return action
@@ -299,12 +300,14 @@ class REINFORCE:
         action_prob = self.policy_net(state)
 
         #梯度上升
-        #原文档paddle版本求交叉熵
         #log_prob = paddle.sum(-1.0 * paddle.log(act_prob) * paddle.nn.functional.one_hot(act, act_prob.shape[1]),axis=-1)
-        log_prob = -torch.gather(torch.log(action_prob), 1, action.unsqueeze(-1)).squeeze(-1)
-        loss = log_prob*reward
+        one_hot_act = torch.nn.functional.one_hot(action, num_classes=action_prob.shape[1]).float()
+        one_hot_act = one_hot_act[:,:,[0,1]]
+        log_prob = torch.sum(-torch.log(action_prob)*one_hot_act , dim=-1)
+        total_reward = torch.sum(reward, dim=-1)
+        loss = log_prob*total_reward
 
-        loss = nn.MSELoss()(loss,torch.zeros_like(loss))
+        loss =torch.mean(loss)
         loss.backward()
         self.optimizer.step()
         self.optimizer.zero_grad()

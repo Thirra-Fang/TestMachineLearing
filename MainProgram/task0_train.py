@@ -43,7 +43,7 @@ class TestConfig:
         self.train_eps = 5000  # max trainng episodes
         self.end_reward = 500 #当ma_reward大于这个值时结束训练
         self.eval_eps = 50 # number of episodes for evaluating
-        self.gamma = 0.95
+        self.gamma = 0.99
         self.epsilon_start = 0.90  # start epsilon of e-greedy policy
         self.epsilon_end = 0.01
         self.epsilon_decay = 500
