@@ -34,16 +34,16 @@ curr_time = datetime.datetime.now().strftime(
 
 class TestConfig:
     def __init__(self):
-        self.algo = "REINFORCE"  # name of algo
+        self.algo = "DDQN"  # name of algo
         self.env = 'CartPole-v1'
         self.result_path = curr_path+"\\outputs\\" + self.env + \
             '\\'+self.algo+'_'+curr_time+'\\results\\'  # path to save results
         self.model_path = curr_path+"\\outputs\\" + self.env + \
             '\\'+self.algo+'_'+curr_time+'\\models\\'  # path to save models
         self.train_eps = 5000  # max trainng episodes
-        self.end_reward = 500 #当ma_reward大于这个值时结束训练
+        self.end_reward = 475 #当ma_reward大于这个值时结束训练
         self.eval_eps = 50 # number of episodes for evaluating
-        self.gamma = 0.99
+        self.gamma = 0.95
         self.epsilon_start = 0.90  # start epsilon of e-greedy policy
         self.epsilon_end = 0.01
         self.epsilon_decay = 500
@@ -85,6 +85,11 @@ def train(cfg, env, agent):
     ma_rewards = []  # moveing average reward
     aver_q_values = []
     aver_pre_q_values = []
+    count100 = 0
+    count200 = 0
+    count300 = 0
+    count400 = 0
+    count500 = 0
     for i_ep in range(cfg.train_eps):
         state = env.reset()
         done = False
@@ -140,6 +145,16 @@ def train(cfg, env, agent):
         if (i_ep+1)%10 == 0:
             print('Episode:{}/{}, Reward:{}'.format(i_ep+1, cfg.train_eps, ep_reward))
         rewards.append(ep_reward)
+        if ep_reward >= 100:
+            count100+=1
+        if ep_reward >= 200:
+            count200+=1
+        if ep_reward >= 300:
+            count300+=1
+        if ep_reward >= 400:
+            count400+=1
+        if ep_reward >= 500:
+            count500+=1
         # save ma rewards
         if ma_rewards:
             ma_rewards.append(0.9*ma_rewards[-1]+0.1*ep_reward)
@@ -148,6 +163,11 @@ def train(cfg, env, agent):
         if ma_rewards[-1] > cfg.end_reward:
             break
     print('Complete training！')
+    print('100以上的回合数：',count100)
+    print('200以上的回合数：',count200)
+    print('300以上的回合数：',count300)
+    print('400以上的回合数：',count400)
+    print('500以上的回合数：',count500)
     return rewards, ma_rewards,aver_q_values, aver_pre_q_values
 
 def eval(cfg,env,agent):

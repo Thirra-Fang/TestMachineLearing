@@ -4,10 +4,11 @@
 @Author: John
 @Email: johnjim0816@gmail.com
 @Date: 2020-06-12 00:50:49
-@LastEditor: John
-LastEditTime: 2021-05-07 16:30:05
-@Discription: 
+@LastEditor: ThirraFang
+LastEditTime: 2025-06-09 10:54:57
+@Discription: 机器学习课件，gym经典控制杆不倒问题。
 @Environment: python 3.7.7
+@StudentTestEnvironment:python 3.7.9;pip 20.1.1;setuptools 47.1.0;gym 0.20.0;torch 1.13.1+cu117;matplotlib 3.5.3;seaborn 0.12.2;pyglet 2.0dev23;PyOpenGL 3.1.9;cuda 11.7.0
 '''
 '''off-policy
 '''
@@ -271,17 +272,28 @@ class REINFORCE:
         self.optimizer = optim.Adam(self.policy_net.parameters(),lr=cfg.lr)  # 使用Adam优化器
         self.gamma = cfg.gamma  # 折扣因子
 
+        # e-greedy策略相关参数
+        self.frame_idx = 0  # 用于epsilon的衰减计数
+        self.epsilon = lambda frame_idx: cfg.epsilon_end + \
+                                         (cfg.epsilon_start - cfg.epsilon_end) * \
+                                         math.exp(-1. * frame_idx / cfg.epsilon_decay)
+
 
     def choose_action(self, state):
         '''选择动作,为保持和DQN和DDQN结构一致，这里同时保留了两个方法
         '''
+        #self.frame_idx += 1
+        #if random.random() > self.epsilon(self.frame_idx):
+        #    action = self.predict(state)
+        #else:
+        #    action = random.randrange(self.action_dim)
+        #return action
         action = self.predict(state)
         return action
     def predict(self, state):
         with torch.no_grad():
             state = torch.tensor([state], device=self.device, dtype=torch.float32)
             act_prob = self.policy_net(state)
-            print(act_prob)
             action = safe_multinomial(act_prob,num_samples=1)[0].item()#根据动作概率选取动作
 
         return action
